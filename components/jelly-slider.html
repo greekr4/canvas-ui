@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>젤리 슬라이더 — CanvasUI</title>
+<link rel="stylesheet" href="../core/canvas-ui.css">
+<style>
+  /* ── 페이지 레이아웃 (토큰만 사용) ── */
+  body {
+    background: var(--cui-bg);
+    color: var(--cui-fg);
+    font-family: var(--cui-font);
+    margin: 0;
+    padding: 24px 16px 48px;
+  }
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .page h1 { font-size: 24px; margin: 0 0 8px; }
+  .page .desc { color: var(--cui-muted); font-size: 14px; margin: 0; }
+
+  .panel {
+    background: var(--cui-card);
+    border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius);
+    padding: 24px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 16px; color: var(--cui-fg); }
+
+  #preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 280px;
+  }
+
+  /* 커스텀 컨트롤 */
+  .ctrl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .ctrl-grid { grid-template-columns: 1fr; } }
+  .ctrl { display: flex; flex-direction: column; gap: 8px; }
+  .ctrl label { font-size: 13px; color: var(--cui-muted); display: flex; justify-content: space-between; }
+  .ctrl label output { color: var(--cui-fg); font-variant-numeric: tabular-nums; }
+  .ctrl input[type="range"] { width: 100%; accent-color: var(--cui-primary); }
+
+  /* 사용법 코드 블록 */
+  pre.code {
+    background: var(--cui-bg);
+    border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius);
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .back { font-size: 14px; }
+  .back a { color: var(--cui-primary); text-decoration: none; }
+  .back a:hover { text-decoration: underline; }
+
+  /* ── 젤리 슬라이더 컴포넌트 (canvas 안에서 촬영되는 DOM) ── */
+  .js-card {
+    --js-accent: var(--cui-primary);
+    width: 320px;
+    box-sizing: border-box;
+    background: var(--cui-card);
+    border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: var(--cui-shadow);
+  }
+  .js-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .js-value {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--js-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .js-unit { font-size: 16px; color: var(--cui-muted); }
+  .js-range {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--js-accent);
+  }
+  /* 실제 :hover는 canvas 위라 안 걸리므로 .cui-hover를 함께 선언 */
+  .js-range:hover, .js-range.cui-hover { filter: brightness(1.15); }
+  .js-hint { font-size: 12px; color: var(--cui-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 상단 타이틀 + 한줄설명 -->
+  <header>
+    <h1>젤리 슬라이더</h1>
+    <p class="desc">진짜 &lt;input type=range&gt;를 촬영해, 드래그 속도에 따라 스프링 물리로 출렁이는 젤리 카드. 값에 따라 색조가 변합니다.</p>
+  </header>
+
+  <!-- 프리뷰 -->
+  <div class="panel" id="preview"></div>
+
+  <!-- 커스텀 컨트롤 -->
+  <div class="panel">
+    <h2>커스텀</h2>
+    <div class="ctrl-grid">
+      <div class="ctrl">
+        <label>탄성 (스프링 강성) <output id="out-stiffness">170</output></label>
+        <input type="range" id="ctl-stiffness" min="40" max="400" step="10" value="170">
+      </div>
+      <div class="ctrl">
+        <label>감쇠 (진동 억제) <output id="out-damping">10</output></label>
+        <input type="range" id="ctl-damping" min="2" max="40" step="1" value="10">
+      </div>
+      <div class="ctrl">
+        <label>시작 색조 (hue) <output id="out-hue">239</output></label>
+        <input type="range" id="ctl-hue" min="0" max="360" step="1" value="239">
+      </div>
+      <div class="ctrl">
+        <label>색조 변화 폭 <output id="out-huerange">120</output></label>
+        <input type="range" id="ctl-huerange" min="0" max="360" step="10" value="120">
+      </div>
+    </div>
+  </div>
+
+  <!-- 사용법 -->
+  <div class="panel">
+    <h2>사용법</h2>
+    <pre class="code"><code>const jelly = CanvasUI.create({
+  mount: '#preview',
+  html: `
+    &lt;div class="js-card"&gt;
+      &lt;div class="js-value-row"&gt;
+        &lt;span class="js-value"&gt;50&lt;/span&gt;&lt;span class="js-unit"&gt;%&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;input class="js-range" type="range" min="0" max="100" value="50"&gt;
+      &lt;div class="js-hint"&gt;썸을 드래그해 보세요&lt;/div&gt;
+    &lt;/div&gt;`,
+  width: 480, height: 280,
+  onFrame(t, api) { /* 스프링 물리: 값 추적 + 속도 기반 변형량 계산 */ },
+  effect(ctx, src, t, api) { /* 촬영본을 squash&amp;stretch로 변형 복사 */ },
+  onHit(el, ev, api) { /* range를 누르면 커스텀 드래그 시작, true 반환 */ },
+});</code></pre>
+  </div>
+
+  <!-- 하단 링크 -->
+  <p class="back"><a href="../index.html">← CanvasUI 컴포넌트 목록으로</a></p>
+
+</div>
+
+<script src="../core/canvas-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── 커스텀 파라미터 (컨트롤로 라이브 조절) ──
+  var params = {
+    stiffness: 170, // 스프링 강성: 클수록 빠르게 목표값을 쫓아감
+    damping: 10,    // 감쇠: 작을수록 오래 출렁임
+    hue: 239,       // 값 0일 때의 색조 (기본: 인디고 계열)
+    hueRange: 120,  // 값 0→100 동안 색조가 이동하는 폭
+  };
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  var jelly = CanvasUI.create({
+    mount: '#preview',
+    html: [
+      '<div class="js-card">',
+      '  <div class="js-value-row">',
+      '    <span class="js-value">50</span><span class="js-unit">%</span>',
+      '  </div>',
+      '  <input class="js-range" type="range" min="0" max="100" value="50">',
+      '  <div class="js-hint">썸을 드래그해 보세요</div>',
+      '</div>',
+    ].join('\n'),
+    width: 480,
+    height: 280,
+
+    // ── 매 프레임: 스프링 물리 (effect 앞에 호출됨) ──
+    onFrame: function (t, api) {
+      var st = api.state;
+      if (st.pos === undefined) { // 최초 1회 초기화
+        st.pos = Number(range.value); // 스프링이 추적하는 표시값
+        st.vel = 0;                   // 속도 (값 단위/초)
+        st.deform = 0;                // squash&stretch 변형량
+        st.skew = 0;                  // 기울임
+        st.last = t;
+      }
+      var dt = clamp((t - st.last) / 1000, 0, 1 / 30);
+      st.last = t;
+
+      // 감쇠 스프링: 실제 슬라이더 값을 목표로 진동하며 수렴
+      var target = Number(range.value);
+      var force = params.stiffness * (target - st.pos) - params.damping * st.vel;
+      st.vel += force * dt;
+      st.pos += st.vel * dt;
+
+      // 속도 → 변형량. 부호가 진동하며 0으로 수렴 = 젤리 출렁임
+      st.deform = clamp(st.vel * 0.0012, -0.28, 0.28);
+      st.skew = clamp(st.vel * -0.0006, -0.15, 0.15);
+    },
+
+    // ── 효과: 촬영된 소스 canvas를 변형해 표시 canvas에 복사 (버퍼 패턴) ──
+    effect: function (ctx, src, t, api) {
+      var d = api.state.deform || 0;
+      var cx = api.center.x + src.width / 2;
+      var cy = api.center.y + src.height / 2;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.transform(1, 0, api.state.skew || 0, 1, 0, 0); // 이동 방향으로 살짝 기울임
+      ctx.scale(1 + d, 1 / (1 + d));                     // 면적 보존 squash&stretch
+      ctx.drawImage(src, -src.width / 2, -src.height / 2);
+      ctx.restore();
+    },
+
+    // ── range를 누르면 커스텀 드래그 시작 (기본 포워딩 생략) ──
+    onHit: function (el, ev, api) {
+      if (el !== range) return false;
+      api.state.dragging = true;
+      try { api.fx.setPointerCapture(ev.pointerId); } catch (ignored) {}
+      setValueFromEvent(ev, api);
+      return true;
+    },
+  });
+
+  var root = jelly.root;
+  var range = root.querySelector('.js-range');
+  var valueEl = root.querySelector('.js-value');
+
+  // ── root 로컬 좌표 기준 요소 rect (코어 hit()와 같은 offset 누적 방식) ──
+  function localRect(el) {
+    var l = 0, t = 0, n = el;
+    while (n && n !== root) { l += n.offsetLeft; t += n.offsetTop; n = n.offsetParent; }
+    return { l: l, t: t, w: el.offsetWidth, h: el.offsetHeight };
+  }
+
+  // ── 포인터 이벤트 → fx 좌표 → 로컬 좌표 → 슬라이더 값 ──
+  function setValueFromEvent(ev, api) {
+    var r = api.fx.getBoundingClientRect();
+    var fxX = (ev.clientX - r.left) * (api.fx.width / r.width);
+    var fxY = (ev.clientY - r.top) * (api.fx.height / r.height);
+    var local = api.toLocal(fxX, fxY);
+    var rect = localRect(range);
+    var min = Number(range.min), max = Number(range.max);
+    var ratio = clamp((local.x - rect.l) / rect.w, 0, 1);
+    var v = Math.round(min + ratio * (max - min));
+    if (Number(range.value) !== v) {
+      range.value = v;
+      applyValue(); // 라벨·색조 갱신 → 다음 프레임 촬영에 자동 반영
+    }
+  }
+
+  // ── 값 → 라벨 텍스트 + 색조 (값에 따라 카드 색조 변화) ──
+  function applyValue() {
+    var v = Number(range.value);
+    valueEl.textContent = v;
+    var hue = (params.hue + (v / 100) * params.hueRange) % 360;
+    root.style.setProperty('--js-accent', 'hsl(' + hue + ', 72%, 62%)');
+  }
+
+  // 드래그 중 이동/종료 (컴포넌트 고유 로직 — 코어는 pointerdown만 포워딩)
+  jelly.fx.addEventListener('pointermove', function (ev) {
+    if (jelly.state.dragging) setValueFromEvent(ev, jelly);
+  });
+  function endDrag() { jelly.state.dragging = false; }
+  jelly.fx.addEventListener('pointerup', endDrag);
+  jelly.fx.addEventListener('pointercancel', endDrag);
+
+  // 폴백(DOM 직접 표시)·키보드 조작 시에도 라벨·색조 동기화
+  range.addEventListener('input', applyValue);
+  applyValue();
+
+  // ── 커스텀 컨트롤 바인딩 ──
+  function bindCtrl(id, outId, key, after) {
+    var input = document.getElementById(id);
+    var out = document.getElementById(outId);
+    input.addEventListener('input', function () {
+      params[key] = Number(input.value);
+      out.textContent = input.value;
+      if (after) after();
+    });
+  }
+  bindCtrl('ctl-stiffness', 'out-stiffness', 'stiffness');
+  bindCtrl('ctl-damping', 'out-damping', 'damping');
+  bindCtrl('ctl-hue', 'out-hue', 'hue', applyValue);
+  bindCtrl('ctl-huerange', 'out-huerange', 'hueRange', applyValue);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanvasUI — 로그인 화면</title>
+<link rel="stylesheet" href="../core/canvas-ui.css">
+<style>
+  /* ── 페이지 레이아웃 (쇼케이스 공통 골격) ── */
+  body {
+    margin: 0; padding: 0 16px 48px;
+    background: var(--cui-bg); color: var(--cui-fg);
+    font-family: var(--cui-font);
+  }
+  .page { max-width: 720px; margin: 0 auto; }
+  .page-head { margin: 24px 0 16px; }
+  .page-head h1 { font-size: 24px; font-weight: 700; margin: 0 0 8px; }
+  .page-head p { font-size: 14px; color: var(--cui-muted); margin: 0; line-height: 1.7; }
+  .section-title { font-size: 15px; font-weight: 600; margin: 32px 0 12px; }
+
+  #preview { display: flex; justify-content: center; }
+
+  /* ── 커스텀 컨트롤 ── */
+  .controls {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 16px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;
+  }
+  .ctl label { display: block; font-size: 13px; color: var(--cui-muted); margin-bottom: 8px; }
+  .ctl input[type="range"] { width: 100%; accent-color: var(--cui-primary); }
+  .ctl input[type="color"] {
+    width: 48px; height: 28px; padding: 0; border: 1px solid var(--cui-border);
+    border-radius: 6px; background: var(--cui-bg); cursor: pointer;
+  }
+  .ctl .val { font-size: 12px; color: var(--cui-muted); margin-left: 8px; }
+
+  /* ── 사용법 코드 블록 ── */
+  pre.usage {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 16px;
+    font-size: 13px; line-height: 1.7; overflow-x: auto;
+    color: var(--cui-fg); margin: 0;
+  }
+
+  .back-link { display: inline-block; margin-top: 32px; font-size: 14px; color: var(--cui-muted); text-decoration: none; }
+  .back-link:hover { color: var(--cui-fg); }
+
+  /* ── 컴포넌트 스타일 (글래스모피즘 로그인 카드) ──
+     캔버스 촬영 대상이므로 :hover와 .cui-hover를 함께 선언한다(코어 규칙). */
+  .login-card {
+    width: 336px; box-sizing: border-box; padding: 32px;
+    background: color-mix(in srgb, var(--cui-card) 72%, transparent); /* 반투명 글래스 */
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    box-shadow: var(--cui-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .login-title { font-size: 20px; font-weight: 700; }
+  .login-sub { font-size: 13px; color: var(--cui-muted); margin: 8px 0 24px; }
+  .login-field { margin-bottom: 16px; }
+  .login-card .cui-input { background: color-mix(in srgb, var(--cui-bg) 60%, transparent); }
+  .login-error {
+    display: none; font-size: 13px; color: #f87171; margin: -8px 0 16px;
+  }
+  .login-error.show { display: block; }
+  .login-btn { width: 100%; padding: 10px 16px; margin-top: 8px; }
+  .login-demo {
+    margin-top: 16px; font-size: 12px; color: var(--cui-muted); text-align: center;
+  }
+  .login-demo code {
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--cui-border);
+    padding: 2px 6px; border-radius: 4px; font-size: 12px;
+  }
+  /* 환영 상태 */
+  .login-welcome { display: none; text-align: center; padding: 24px 0; }
+  .login-welcome.show { display: block; }
+  .welcome-mark {
+    width: 48px; height: 48px; line-height: 48px; margin: 0 auto 16px;
+    border-radius: 999px; background: color-mix(in srgb, var(--cui-primary) 18%, transparent);
+    border: 1px solid var(--cui-primary); color: var(--cui-primary);
+    font-size: 22px; font-weight: 700; text-align: center;
+  }
+  .welcome-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .welcome-sub { font-size: 13px; color: var(--cui-muted); margin-bottom: 24px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1>로그인 화면</h1>
+    <p>글래스모피즘 카드 + 포커스 필드를 따라다니는 캔버스 스포트라이트.
+       비밀번호가 틀리면 셰이크·빨간 플래시, 맞으면 카드가 확대되며 빛이 퍼집니다.</p>
+  </div>
+
+  <div id="preview"></div>
+
+  <div class="section-title">커스텀</div>
+  <div class="controls">
+    <div class="ctl">
+      <label for="ctl-primary">포인트 컬러 (--cui-primary)</label>
+      <input type="color" id="ctl-primary" value="#6366f1">
+    </div>
+    <div class="ctl">
+      <label for="ctl-spot-color">스포트라이트 색상</label>
+      <input type="color" id="ctl-spot-color" value="#6366f1">
+    </div>
+    <div class="ctl">
+      <label for="ctl-spot">스포트라이트 세기<span class="val" id="ctl-spot-val">0.8</span></label>
+      <input type="range" id="ctl-spot" min="0" max="1" step="0.05" value="0.8">
+    </div>
+    <div class="ctl">
+      <label for="ctl-shake">셰이크 강도<span class="val" id="ctl-shake-val">10</span></label>
+      <input type="range" id="ctl-shake" min="0" max="20" step="1" value="10">
+    </div>
+  </div>
+
+  <div class="section-title">사용법</div>
+  <pre class="usage"><code>&lt;link rel="stylesheet" href="core/canvas-ui.css"&gt;
+&lt;script src="core/canvas-ui.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const login = CanvasUI.create({
+    mount: '#preview',
+    width: 560, height: 520,
+    html: '&lt;div class="login-card"&gt;…이메일/비밀번호/버튼…&lt;/div&gt;',
+    onFrame: (t, api) =&gt; { /* 스포트라이트 위치·스케일 보간 */ },
+    effect: (ctx, src, t, api) =&gt; {
+      // 버퍼 패턴: 소스 canvas(src)를 변형해 표시 canvas에 그린다
+      ctx.translate(api.fx.width / 2 + shakeX, api.fx.height / 2);
+      ctx.scale(api.state.scale, api.state.scale);
+      ctx.drawImage(src, -src.width / 2, -src.height / 2);
+    },
+  });
+&lt;/script&gt;</code></pre>
+
+  <a class="back-link" href="../index.html">← 컴포넌트 목록으로</a>
+</div>
+
+<script src="../core/canvas-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var CORRECT_PW = 'canvas123';
+
+  var loginHtml =
+    '<div class="login-card">' +
+      '<div class="lg-form">' +
+        '<div class="login-title">로그인</div>' +
+        '<div class="login-sub">CanvasUI 계정으로 계속하기</div>' +
+        '<div class="login-field">' +
+          '<label class="cui-label" for="lg-email">이메일</label>' +
+          '<input class="cui-input" id="lg-email" type="email" placeholder="you@example.com" autocomplete="off">' +
+        '</div>' +
+        '<div class="login-field">' +
+          '<label class="cui-label" for="lg-pw">비밀번호</label>' +
+          '<input class="cui-input" id="lg-pw" type="password" placeholder="••••••••">' +
+        '</div>' +
+        '<div class="login-error">비밀번호가 올바르지 않습니다</div>' +
+        '<button class="cui-btn login-btn" type="button">로그인</button>' +
+        '<div class="login-demo">데모 계정 — 비밀번호: <code>canvas123</code></div>' +
+      '</div>' +
+      '<div class="login-welcome">' +
+        '<div class="welcome-mark">✓</div>' +
+        '<div class="welcome-title">환영합니다</div>' +
+        '<div class="welcome-sub">로그인이 완료되었습니다.</div>' +
+        '<button class="cui-btn cui-btn-ghost" type="button" data-role="reset">다시 로그인</button>' +
+      '</div>' +
+    '</div>';
+
+  /** hex(#rrggbb) → "r,g,b" 문자열 */
+  function hexToRgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+  }
+
+  /** el의 중심을 root 로컬 좌표로 계산 (코어 hit 캐시와 같은 offset 누적 방식) */
+  function localCenter(el, root) {
+    var l = 0, t = 0, n = el;
+    while (n && n !== root) { l += n.offsetLeft; t += n.offsetTop; n = n.offsetParent; }
+    return { x: l + el.offsetWidth / 2, y: t + el.offsetHeight / 2 };
+  }
+
+  /** 부드러운 라디얼 글로우 1개 */
+  function glow(ctx, x, y, r, rgb, a) {
+    var g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(' + rgb + ',' + a + ')');
+    g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  var login = CanvasUI.create({
+    mount: '#preview',
+    width: 560,
+    height: 520,
+    html: loginHtml,
+
+    /** 매 프레임: 스포트라이트 위치·스케일·플래시 값 보간 (effect 앞에 실행) */
+    onFrame: function (t, api) {
+      var s = api.state;
+      // 스포트라이트 목표 위치: 포커스된 필드 중심
+      if (s.focusEl && s.focusEl.isConnected) {
+        var c = localCenter(s.focusEl, api.root);
+        if (s.spotX === null) { s.spotX = c.x; s.spotY = c.y; }
+        s.spotX += (c.x - s.spotX) * 0.18;
+        s.spotY += (c.y - s.spotY) * 0.18;
+        s.spotA += (1 - s.spotA) * 0.12;
+      } else {
+        s.spotA += (0 - s.spotA) * 0.12;
+      }
+      // 성공 시 카드 확대(부드럽게), 평상시 1.0 복귀
+      var target = s.success ? 1.05 : 1.0;
+      s.scale += (target - s.scale) * 0.08;
+    },
+
+    /** 버퍼 패턴: src(살아있는 DOM 촬영본)를 변형해 fx에 그린다 */
+    effect: function (ctx, src, t, api) {
+      var s = api.state;
+      var W = api.fx.width, H = api.fx.height;
+      var hw = src.width / 2, hh = src.height / 2;
+
+      // 은은한 앰비언트 배경 (글래스 카드가 비쳐 보이는 바탕)
+      glow(ctx, W * 0.30 + Math.sin(t * 0.0003) * 24, H * 0.32, 240, s.spotColor, 0.08);
+      glow(ctx, W * 0.74, H * 0.72 + Math.cos(t * 0.00025) * 24, 220, '56,189,248', 0.05);
+
+      // 실패 셰이크 (500ms 감쇠)
+      var shakeX = 0;
+      if (s.failT) {
+        var fd = t - s.failT;
+        if (fd < 500) shakeX = Math.sin(fd * 0.09) * s.shakeStrength * (1 - fd / 500);
+        else s.failT = 0;
+      }
+
+      ctx.save();
+      ctx.translate(W / 2 + shakeX, H / 2);
+      ctx.scale(s.scale, s.scale);
+
+      // 스포트라이트: 카드 뒤에서 포커스 필드를 따라다니는 글로우
+      if (s.spotA > 0.01 && s.spotX !== null) {
+        glow(ctx, s.spotX - hw, s.spotY - hh, 110, s.spotColor, 0.55 * s.spotA * s.spotIntensity);
+      }
+
+      ctx.drawImage(src, -hw, -hh);
+
+      // 스포트라이트 상단 하이라이트 (유리에 빛이 얹힌 느낌, 아주 약하게)
+      if (s.spotA > 0.01 && s.spotX !== null) {
+        ctx.globalCompositeOperation = 'lighter';
+        glow(ctx, s.spotX - hw, s.spotY - hh, 70, s.spotColor, 0.10 * s.spotA * s.spotIntensity);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      // 실패 빨간 플래시: 카드 영역 오버레이 (450ms 감쇠)
+      if (s.flashT) {
+        var pd = t - s.flashT;
+        if (pd < 450) {
+          var a = (1 - pd / 450) * 0.22;
+          ctx.fillStyle = 'rgba(239,68,68,' + a + ')';
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(-hw, -hh, src.width, src.height, 16);
+            ctx.fill();
+          } else {
+            ctx.fillRect(-hw, -hh, src.width, src.height);
+          }
+        } else s.flashT = 0;
+      }
+      ctx.restore();
+
+      // 성공 빛 퍼짐: 카드 중심에서 퍼지는 링 (900ms)
+      if (s.burstT) {
+        var bd = t - s.burstT;
+        if (bd < 900) {
+          var p = bd / 900;
+          var r = 60 + p * 320;
+          ctx.globalCompositeOperation = 'lighter';
+          glow(ctx, W / 2, H / 2, r, s.spotColor, (1 - p) * 0.35);
+          ctx.globalCompositeOperation = 'source-over';
+        } else s.burstT = 0;
+      }
+    },
+  });
+
+  // ── 컴포넌트 상태 초기화 ──
+  var s = login.state;
+  s.focusEl = null;
+  s.spotX = null; s.spotY = null; s.spotA = 0;
+  s.scale = 1; s.success = false;
+  s.failT = 0; s.flashT = 0; s.burstT = 0;
+  s.spotColor = hexToRgb('#6366f1');
+  s.spotIntensity = 0.8;
+  s.shakeStrength = 10;
+
+  // ── 컴포넌트 고유 로직 (포워딩·촬영은 코어가 처리, 여기선 진짜 DOM 이벤트만) ──
+  var root = login.root;
+  var emailInput = root.querySelector('#lg-email');
+  var pwInput = root.querySelector('#lg-pw');
+  var loginBtn = root.querySelector('.login-btn');
+  var errMsg = root.querySelector('.login-error');
+  var formBox = root.querySelector('.lg-form');
+  var welcomeBox = root.querySelector('.login-welcome');
+  var resetBtn = root.querySelector('[data-role="reset"]');
+
+  // 포커스 추적 → 스포트라이트 목표 (코어가 pointerdown을 focus()로 포워딩해준다)
+  root.addEventListener('focusin', function (e) {
+    if (e.target === emailInput || e.target === pwInput) s.focusEl = e.target;
+  });
+  root.addEventListener('focusout', function (e) {
+    if (e.target === s.focusEl) s.focusEl = null;
+  });
+
+  function attemptLogin() {
+    if (s.success) return;
+    if (pwInput.value === CORRECT_PW) {
+      s.success = true;
+      s.burstT = performance.now();
+      s.focusEl = null;
+      errMsg.classList.remove('show');
+      formBox.style.display = 'none';
+      welcomeBox.classList.add('show'); // DOM 변경은 다음 프레임 촬영에 자동 반영
+    } else {
+      s.failT = performance.now();
+      s.flashT = s.failT;
+      errMsg.classList.add('show');
+    }
+  }
+
+  function resetForm() {
+    s.success = false;
+    s.burstT = 0;
+    pwInput.value = '';
+    errMsg.classList.remove('show');
+    welcomeBox.classList.remove('show');
+    formBox.style.display = '';
+  }
+
+  loginBtn.addEventListener('click', attemptLogin);
+  resetBtn.addEventListener('click', resetForm);
+  pwInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') attemptLogin();
+  });
+  emailInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') pwInput.focus();
+  });
+  pwInput.addEventListener('input', function () { errMsg.classList.remove('show'); });
+
+  // ── 커스텀 컨트롤 ──
+  var previewMount = document.getElementById('preview');
+  document.getElementById('ctl-primary').addEventListener('input', function (e) {
+    previewMount.style.setProperty('--cui-primary', e.target.value);
+  });
+  document.getElementById('ctl-spot-color').addEventListener('input', function (e) {
+    s.spotColor = hexToRgb(e.target.value);
+  });
+  document.getElementById('ctl-spot').addEventListener('input', function (e) {
+    s.spotIntensity = parseFloat(e.target.value);
+    document.getElementById('ctl-spot-val').textContent = e.target.value;
+  });
+  document.getElementById('ctl-shake').addEventListener('input', function (e) {
+    s.shakeStrength = parseInt(e.target.value, 10);
+    document.getElementById('ctl-shake-val').textContent = e.target.value;
+  });
+})();
+</script>
+</body>
+</html>

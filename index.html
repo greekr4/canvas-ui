@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CanvasUI 문서</title>
+<link rel="stylesheet" href="core/canvas-ui.css">
+<style>
+  /* ── 문서 셸 (shadcn 문서 사이트 감성, 다크) ── */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--cui-bg); color: var(--cui-fg);
+    font-family: var(--cui-font); font-size: 15px; line-height: 1.6;
+  }
+  /* 코어가 body 최상단에 자동 삽입하는 배지/경고는 셸이 자체 표시하므로 숨김 */
+  body > .cui-badge, body > .cui-warn { display: none; }
+
+  .ds-shell {
+    display: grid; grid-template-columns: 240px minmax(0, 1fr) 200px;
+    max-width: 1280px; margin: 0 auto; min-height: 100vh;
+  }
+
+  /* 좌측 사이드바 */
+  .ds-side {
+    border-right: 1px solid var(--cui-border);
+    padding: 24px 16px; position: sticky; top: 0;
+    height: 100vh; overflow-y: auto;
+  }
+  .ds-logo {
+    display: block; font-size: 16px; font-weight: 700; color: var(--cui-fg);
+    text-decoration: none; padding: 6px 10px; margin-bottom: 16px;
+  }
+  .ds-side-label {
+    font-size: 12px; font-weight: 600; color: var(--cui-muted);
+    padding: 6px 10px; margin-top: 16px;
+  }
+  .ds-side a.ds-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px;
+    font-size: 14px; color: var(--cui-muted); text-decoration: none;
+  }
+  .ds-side a.ds-item:hover { color: var(--cui-fg); }
+  .ds-side a.ds-item.active {
+    background: var(--cui-card); color: var(--cui-fg);
+    border: 1px solid var(--cui-border);
+  }
+
+  /* 중앙 본문 */
+  .ds-main { padding: 48px 40px 96px; }
+  .ds-article { max-width: 760px; margin: 0 auto; }
+  .ds-article h1 { font-size: 30px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .ds-article h2 {
+    font-size: 18px; font-weight: 700; margin: 40px 0 12px;
+    scroll-margin-top: 24px;
+  }
+  .ds-oneliner { color: var(--cui-muted); margin: 0 0 8px; }
+  .ds-card {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 32px;
+    display: flex; justify-content: center; align-items: center; overflow-x: auto;
+  }
+  .ds-card.ds-knobs { display: block; }
+
+  .ds-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; margin: 8px 0 16px;
+  }
+  .ds-badge.ok { background: #12351f; color: #4ade80; border: 1px solid #22643a; }
+  .ds-badge.no { background: #3a1620; color: #f87171; border: 1px solid #6b2432; }
+
+  pre.ds-code {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 16px; margin: 8px 0 0;
+    font-size: 13px; line-height: 1.7; overflow-x: auto;
+  }
+  pre.ds-code code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--cui-fg); }
+
+  details.ds-usage { border: 1px solid var(--cui-border); border-radius: var(--cui-radius); padding: 0; }
+  details.ds-usage summary {
+    cursor: pointer; padding: 12px 16px; font-size: 14px; font-weight: 600;
+    color: var(--cui-muted); list-style: none;
+  }
+  details.ds-usage summary::before { content: "▸ "; }
+  details.ds-usage[open] summary::before { content: "▾ "; }
+  details.ds-usage[open] summary { color: var(--cui-fg); }
+  .ds-usage-body { position: relative; padding: 0 16px 16px; }
+  .ds-usage-body pre.ds-code { margin: 0; }
+  .ds-copy {
+    position: absolute; top: 10px; right: 26px;
+    background: var(--cui-bg); color: var(--cui-muted);
+    border: 1px solid var(--cui-border); border-radius: 8px;
+    padding: 4px 10px; font-size: 12px; font-family: var(--cui-font); cursor: pointer;
+  }
+  .ds-copy:hover { color: var(--cui-fg); }
+
+  .ds-pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 48px; }
+  .ds-pager a {
+    flex: 0 1 auto; max-width: 48%;
+    border: 1px solid var(--cui-border); border-radius: var(--cui-radius);
+    padding: 12px 16px; text-decoration: none; color: var(--cui-fg); font-size: 14px;
+  }
+  .ds-pager a small { display: block; color: var(--cui-muted); font-size: 12px; }
+  .ds-pager a:hover { border-color: var(--cui-muted); }
+  .ds-pager .next { margin-left: auto; text-align: right; }
+
+  /* 우측 목차 */
+  .ds-toc { padding: 48px 16px; position: sticky; top: 0; height: 100vh; }
+  .ds-toc-label { font-size: 12px; font-weight: 600; color: var(--cui-muted); margin-bottom: 8px; }
+  .ds-toc a {
+    display: block; font-size: 13px; color: var(--cui-muted);
+    text-decoration: none; padding: 3px 0;
+  }
+  .ds-toc a:hover { color: var(--cui-fg); }
+
+  /* variants 탭 */
+  .ds-tabs { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--cui-border); }
+  .ds-tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 8px 14px; font-family: var(--cui-font); font-size: 14px;
+    color: var(--cui-muted); cursor: pointer;
+  }
+  .ds-tab:hover { color: var(--cui-fg); }
+  .ds-tab.active { color: var(--cui-fg); border-bottom-color: var(--cui-fg); font-weight: 600; }
+
+  .ds-step { font-size: 13px; color: var(--cui-muted); margin: 24px 0 0; }
+  .ds-empty { color: var(--cui-muted); }
+
+  @media (max-width: 1100px) {
+    .ds-shell { grid-template-columns: 240px minmax(0, 1fr); }
+    .ds-toc { display: none; }
+  }
+  @media (max-width: 640px) {
+    .ds-shell { grid-template-columns: 1fr; }
+    .ds-side { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--cui-border); }
+    .ds-main { padding: 32px 20px 64px; }
+  }
+</style>
+</head>
+<body>
+<div class="ds-shell">
+  <aside class="ds-side" id="ds-side"></aside>
+  <main class="ds-main"><div class="ds-article" id="ds-article"></div></main>
+  <nav class="ds-toc" id="ds-toc"></nav>
+</div>
+
+<script src="core/canvas-ui.js"></script>
+<script>
+/* ── CUIDocs 셸 v2: section 기반 register 수집 + variants 탭 + renderDoc + 해시 라우팅 ── */
+(function () {
+  'use strict';
+
+  var registry = {};       // id → 등록 객체
+  var currentApi = null;   // 현재 마운트된 컴포넌트 api
+
+  // 사이드바 섹션 (등록 순서 유지)
+  var SECTIONS = [
+    { key: 'start', label: '시작하기' },
+    { key: 'basics', label: '기초' },
+    { key: 'components', label: '데모' },
+    { key: 'official', label: '공식 레퍼런스' },
+  ];
+  var sectionItems = { start: [], basics: [], official: [], components: [] };
+
+  // 시작하기 섹션 내장 페이지
+  var BUILTIN = {
+    intro: { id: 'intro', name: '소개', emoji: null },
+  };
+
+  window.CUIDocs = {
+    register: function (def) {
+      if (!def || !def.id) return;
+      var sec = sectionItems.hasOwnProperty(def.section) ? def.section : 'components';
+      if (!registry[def.id]) sectionItems[sec].push(def.id);
+      registry[def.id] = def;
+    },
+    boot: boot,
+  };
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function meta(id) {
+    if (BUILTIN[id]) return BUILTIN[id];
+    var reg = registry[id];
+    return {
+      id: id,
+      name: (reg && reg.name) || id,
+      emoji: reg ? (reg.emoji || '🧩') : null,
+    };
+  }
+
+  function sectionOf(id) {
+    if (BUILTIN[id]) return 'start';
+    var reg = registry[id];
+    if (reg && sectionItems.hasOwnProperty(reg.section)) return reg.section;
+    return 'components';
+  }
+
+  // 섹션 내 네비 순서 (시작하기는 내장 페이지 + 등록 순)
+  function navOrder(secKey) {
+    if (secKey === 'start') return ['intro'].concat(sectionItems.start);
+    return sectionItems[secKey];
+  }
+
+  function route() {
+    var h = location.hash.replace(/^#\/?/, '');
+    return h || 'intro';
+  }
+
+  /* ── 사이드바 ── */
+  function renderSide(active) {
+    var side = document.getElementById('ds-side');
+    side.innerHTML = '';
+    var logo = el('a', 'ds-logo', 'CanvasUI');
+    logo.href = '#/intro';
+    side.appendChild(logo);
+
+    function item(href, label, icon, key) {
+      var a = el('a', 'ds-item' + (active === key ? ' active' : ''));
+      a.href = href;
+      if (icon) a.appendChild(el('span', null, icon));
+      a.appendChild(el('span', null, label));
+      return a;
+    }
+
+    SECTIONS.forEach(function (s) {
+      var ids = navOrder(s.key);
+      if (!ids.length) return;
+      side.appendChild(el('div', 'ds-side-label', s.label));
+      ids.forEach(function (id) {
+        var m = meta(id);
+        side.appendChild(item('#/' + id, m.name, null, id));
+      });
+    });
+  }
+
+  /* ── 우측 목차 ── */
+  function renderToc(sections) {
+    var toc = document.getElementById('ds-toc');
+    toc.innerHTML = '';
+    if (!sections.length) return;
+    toc.appendChild(el('div', 'ds-toc-label', '이 페이지에서'));
+    sections.forEach(function (s) {
+      var a = el('a', null, s.label);
+      a.href = '#' + location.hash.replace(/^#/, '').split('?')[0];
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        var t = document.getElementById(s.anchor);
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      toc.appendChild(a);
+    });
+  }
+
+  function codeBlock(text) {
+    var pre = el('pre', 'ds-code');
+    var code = el('code');
+    code.textContent = text;
+    pre.appendChild(code);
+    return pre;
+  }
+
+  /* ── 이전/다음 네비 (같은 섹션 안에서만) ── */
+  function renderPager(art, id) {
+    var order = navOrder(sectionOf(id));
+    var idx = order.indexOf(id);
+    if (idx < 0) return;
+    var pager = el('div', 'ds-pager');
+    if (idx > 0) {
+      var pm = meta(order[idx - 1]);
+      var pa = el('a', 'prev');
+      pa.href = '#/' + pm.id;
+      pa.appendChild(el('small', null, '이전'));
+      pa.appendChild(document.createTextNode(pm.name));
+      pager.appendChild(pa);
+    }
+    if (idx < order.length - 1) {
+      var nm = meta(order[idx + 1]);
+      var na = el('a', 'next');
+      na.href = '#/' + nm.id;
+      na.appendChild(el('small', null, '다음'));
+      na.appendChild(document.createTextNode(nm.name));
+      pager.appendChild(na);
+    }
+    if (pager.childNodes.length) art.appendChild(pager);
+  }
+
+  /* ── 페이지: 소개 ── */
+  function renderIntro(art) {
+    art.appendChild(el('h1', null, 'CanvasUI'));
+    art.appendChild(el('p', 'ds-oneliner', '2026년 5월 공개된 HTML-in-Canvas API로 이것저것 만들어 본 기록입니다. DOM을 캔버스에 그리고, 클릭과 타이핑도 돌려받습니다.'));
+    var ok = window.CanvasUI && CanvasUI.supported;
+    art.appendChild(el('div', 'ds-badge ' + (ok ? 'ok' : 'no'),
+      ok ? '✅ HTML-in-Canvas 지원됨 (ctx.' + CanvasUI.drawFnName + ')'
+         : '❌ HTML-in-Canvas 미지원 — DOM 폴백 모드'));
+    art.appendChild(el('h2', null, 'Canary 플래그'));
+    art.appendChild(codeBlock(
+      'Chrome Canary(또는 Chromium 146+) 실행\n' +
+      'chrome://flags/#canvas-draw-element → Enabled\n' +
+      '브라우저 재시작'
+    ));
+    renderPager(art, 'intro');
+    renderToc([]);
+  }
+
+
+  /* ── 페이지: 문서 (renderDoc) ── */
+  function renderDocPage(art, reg) {
+    art.appendChild(el('h1', null, reg.name || reg.id));
+    if (reg.oneLiner) art.appendChild(el('p', 'ds-oneliner', reg.oneLiner));
+    var box = el('div');
+    art.appendChild(box);
+    try { reg.renderDoc(box); } catch (e) {
+      box.appendChild(el('p', 'ds-empty', '문서 렌더 중 오류: ' + e.message));
+    }
+    renderPager(art, reg.id);
+    renderToc([]);
+  }
+
+  /* ── 페이지: 컴포넌트 (단일 또는 variants 탭) ── */
+  function renderComponent(art, id) {
+    var reg = registry[id];
+    var m = meta(id);
+    art.appendChild(el('h1', null, m.name));
+
+    if (!reg) {
+      art.appendChild(el('p', 'ds-empty', '아직 등록되지 않은 컴포넌트입니다 (components/' + id + '.js 로드 확인).'));
+      renderToc([]);
+      return;
+    }
+    art.appendChild(el('p', 'ds-oneliner', reg.oneLiner || ''));
+
+    // 단일형은 variants 하나로 정규화
+    var variants = (reg.variants && reg.variants.length) ? reg.variants
+      : [{ id: 'default', name: null, code: reg.code, mount: reg.mount, knobs: reg.knobs }];
+
+    // variants 탭 UI (2개 이상일 때만)
+    var tabButtons = [];
+    if (variants.length > 1) {
+      var tabs = el('div', 'ds-tabs');
+      variants.forEach(function (v, i) {
+        var b = el('button', 'ds-tab', v.name || v.id || ('변형 ' + (i + 1)));
+        b.type = 'button';
+        b.addEventListener('click', function () { selectVariant(i); });
+        tabs.appendChild(b);
+        tabButtons.push(b);
+      });
+      art.appendChild(tabs);
+    }
+
+    // 변형별 본문 컨테이너
+    var body = el('div');
+    art.appendChild(body);
+
+    function mountVariant(v) {
+      body.innerHTML = '';
+      var sections = [];
+
+      // [미리보기]
+      var h = el('h2', null, '미리보기');
+      h.id = 'preview';
+      body.appendChild(h);
+      var previewCard = el('div', 'ds-card');
+      var mountEl = el('div');
+      previewCard.appendChild(mountEl);
+      body.appendChild(previewCard);
+      sections.push({ anchor: 'preview', label: '미리보기' });
+
+      try {
+        currentApi = (typeof v.mount === 'function' ? v.mount(mountEl) : null) || null;
+      } catch (e) {
+        previewCard.appendChild(el('p', 'ds-empty', '마운트 중 오류: ' + e.message));
+      }
+
+      // [커스텀] — knobs가 있을 때만
+      if (typeof v.knobs === 'function') {
+        var h2 = el('h2', null, '커스텀');
+        h2.id = 'custom';
+        body.appendChild(h2);
+        var knobCard = el('div', 'ds-card ds-knobs');
+        body.appendChild(knobCard);
+        sections.push({ anchor: 'custom', label: '커스텀' });
+        try { v.knobs(knobCard, currentApi); } catch (e) {
+          knobCard.appendChild(el('p', 'ds-empty', '컨트롤 생성 중 오류: ' + e.message));
+        }
+      }
+
+      // [사용법]
+      var h3 = el('h2', null, '사용법');
+      h3.id = 'usage';
+      body.appendChild(h3);
+      var details = el('details', 'ds-usage');
+      details.appendChild(el('summary', null, '코드 보기'));
+      var usageBody = el('div', 'ds-usage-body');
+      var copy = el('button', 'ds-copy', '복사');
+      copy.addEventListener('click', function () {
+        var done = function () { copy.textContent = '복사됨'; setTimeout(function () { copy.textContent = '복사'; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(v.code || '').then(done, done);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = v.code || '';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (ignored) {}
+          ta.remove(); done();
+        }
+      });
+      usageBody.appendChild(copy);
+      usageBody.appendChild(codeBlock(v.code || ''));
+      details.appendChild(usageBody);
+      body.appendChild(details);
+      sections.push({ anchor: 'usage', label: '사용법' });
+
+      renderToc(sections);
+    }
+
+    function selectVariant(i) {
+      // 탭 전환 시 이전 api 해제
+      if (currentApi) {
+        try { currentApi.destroy(); } catch (ignored) {}
+        currentApi = null;
+      }
+      tabButtons.forEach(function (b, j) { b.className = 'ds-tab' + (j === i ? ' active' : ''); });
+      mountVariant(variants[i]);
+    }
+
+    if (tabButtons.length) tabButtons[0].className = 'ds-tab active';
+    mountVariant(variants[0]);
+
+    renderPager(art, id);
+  }
+
+  /* ── 라우터 ── */
+  function render() {
+    // 이탈: 이전 컴포넌트 해제
+    if (currentApi) {
+      try { currentApi.destroy(); } catch (ignored) {}
+      currentApi = null;
+    }
+    var r = route();
+    renderSide(r);
+    var art = document.getElementById('ds-article');
+    art.innerHTML = '';
+    if (r === 'intro') renderIntro(art);
+    else if (registry[r] && typeof registry[r].renderDoc === 'function') renderDocPage(art, registry[r]);
+    else if (registry[r]) renderComponent(art, r);
+    else renderIntro(art);
+    window.scrollTo(0, 0);
+  }
+
+  function boot() {
+    render();
+    window.addEventListener('hashchange', render);
+  }
+})();
+</script>
+
+<script>
+/* ── 모듈 로더: 없는 파일이 있어도 셸은 계속 동작 (에러 무시, 순서 보장) ── */
+(function () {
+  'use strict';
+  // three.js는 모듈보다 먼저 동기 로드 (vendor, CDN 아님)
+  var three = document.createElement('script');
+  three.src = 'vendor/three.min.js';
+  three.async = false;
+  document.body.appendChild(three);
+
+  var MODULES = [
+    'basics-1',
+    'basics-2',
+    'basics-3',
+    'basics-4',
+    'official-rotated-text',
+    'official-pie-chart',
+    'official-webgl-cube',
+    'official-form',
+    'official-jelly-slider',
+    'login',
+    'keyboard-3d',
+    'keyboard-fps',
+    'phone-3d',
+    'three-wasd',
+    'skill-page',
+  ];
+  var pending = MODULES.length;
+  function settle() {
+    pending -= 1;
+    if (pending === 0) CUIDocs.boot();
+  }
+  MODULES.forEach(function (name) {
+    var s = document.createElement('script');
+    s.src = 'components/' + name + '.js';
+    s.async = false;          // 등록 순서 = 목록 순서 보장
+    s.onload = settle;
+    s.onerror = settle;       // 404 등 로드 실패 무시
+    document.body.appendChild(s);
+  });
+})();
+</script>
+</body>
+</html>

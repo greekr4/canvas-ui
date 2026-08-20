@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanvasUI 코어 스모크 테스트</title>
+<link rel="stylesheet" href="canvas-ui.css">
+<style>
+  body { background: var(--cui-bg); color: var(--cui-fg); font-family: var(--cui-font); padding: 24px; }
+  #demo { max-width: 720px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div id="demo"></div>
+<script src="canvas-ui.js"></script>
+<script>
+  // 코어만 로드해 카드+버튼+input 하나를 띄운다. effect 생략 → src 중앙 표시.
+  const app = CanvasUI.create({
+    mount: '#demo',
+    html: `
+      <div class="cui-card" style="width: 360px;">
+        <label class="cui-label">스모크 테스트 — 캔버스 속 진짜 DOM</label>
+        <input class="cui-input" placeholder="클릭하고 타이핑 (한글 OK)" style="margin-bottom: 16px;">
+        <button class="cui-btn" onclick="this.textContent = '클릭됨 ' + new Date().toLocaleTimeString('ko-KR')">클릭 테스트</button>
+      </div>`,
+    width: 720, height: 480,
+  });
+</script>
+</body>
+</html>

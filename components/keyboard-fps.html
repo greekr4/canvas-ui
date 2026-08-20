@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanvasUI — FPS 키보드 사격</title>
+<link rel="stylesheet" href="../core/canvas-ui.css">
+<style>
+  /* ── 페이지 레이아웃 (디자인 토큰만 사용) ── */
+  body {
+    margin: 0; padding: 0 0 64px;
+    background: var(--cui-bg); color: var(--cui-fg);
+    font-family: var(--cui-font);
+  }
+  .page { max-width: 840px; margin: 0 auto; padding: 0 24px; }
+  .page h1 { font-size: 28px; margin: 32px 0 8px; }
+  .page .desc { color: var(--cui-muted); font-size: 15px; margin: 0 0 24px; line-height: 1.7; }
+  .section-title { font-size: 16px; font-weight: 700; margin: 32px 0 12px; }
+
+  /* 프리뷰 카드 */
+  .preview {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); box-shadow: var(--cui-shadow);
+    padding: 16px; overflow-x: auto;
+  }
+  #stage .cui-fx { margin: 0 auto; }
+
+  /* 해설 박스 */
+  .note {
+    margin-top: 16px; padding: 16px;
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-left: 3px solid var(--cui-primary);
+    border-radius: var(--cui-radius);
+    font-size: 14px; line-height: 1.8; color: var(--cui-fg);
+  }
+  .note strong { color: var(--cui-primary); }
+
+  /* 커스텀 컨트롤 */
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px; padding: 16px;
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius);
+  }
+  .ctl label { display: block; font-size: 13px; color: var(--cui-muted); margin-bottom: 8px; }
+  .ctl output { color: var(--cui-fg); font-weight: 600; margin-left: 8px; }
+  .ctl input[type="range"] { width: 100%; accent-color: var(--cui-primary); }
+  .ctl input[type="color"] {
+    width: 48px; height: 32px; padding: 0; border: 1px solid var(--cui-border);
+    border-radius: 8px; background: var(--cui-bg); cursor: pointer;
+  }
+
+  /* 사용법 코드 블록 */
+  .code {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 16px;
+    overflow-x: auto; font-size: 13px; line-height: 1.7;
+  }
+  .code code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--cui-fg); white-space: pre; }
+
+  .back { display: inline-block; margin-top: 32px; color: var(--cui-muted); font-size: 14px; text-decoration: none; }
+  .back:hover { color: var(--cui-fg); }
+
+  /* ── 컴포넌트 내부 마크업 스타일 (canvas에 촬영되는 DOM) ── */
+  .kfps { width: 600px; padding: 24px; background: var(--cui-card);
+          border: 1px solid var(--cui-border); border-radius: var(--cui-radius); }
+  .kfps-input { margin-bottom: 24px; font-size: 16px; letter-spacing: 1px; }
+  .kfps-board { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .kfps-row { display: flex; gap: 8px; }
+  .kfps-key {
+    width: 44px; height: 44px; padding: 0;
+    background: var(--cui-bg); color: var(--cui-fg);
+    border: 1px solid var(--cui-border); border-radius: 8px;
+    font-size: 14px; font-weight: 600; font-family: var(--cui-font);
+    cursor: pointer;
+  }
+  /* 실제 :hover는 canvas 위라 안 걸림 → .cui-hover 함께 선언 (코어 규칙) */
+  .kfps-key:hover, .kfps-key.cui-hover { border-color: var(--cui-muted); background: var(--cui-card); }
+  .kfps-key:active, .kfps-key.cui-active { transform: scale(0.95); }
+  .kfps-key-wide { width: 96px; }
+  .kfps-key-space { width: 304px; }
+  /* 피격 플래시: 클래스 토글 → 다음 프레임 촬영에 자동 반영 */
+  .kfps-key.kfps-hit {
+    background: var(--cui-primary); color: var(--cui-primary-fg);
+    border-color: var(--cui-primary);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>FPS 키보드 사격</h1>
+  <p class="desc">
+    마우스는 십자선, 클릭은 발사. 키캡을 맞히면 반동·총구 섬광·탄흔과 함께
+    그 글자가 상단의 <strong>진짜 input</strong>에 타이핑됩니다. (연출은 만화적 수준 — 피·인체 없음)
+  </p>
+
+  <div class="preview"><div id="stage"></div></div>
+
+  <div class="note">
+    💡 <strong>탄흔·섬광·십자선은 전부 canvas 오버레이</strong>에만 그려집니다.
+    키캡·input 같은 DOM은 클래스 토글 한 번 외엔 전혀 건드리지 않아서 <strong>DOM 트리는 깨끗하게 유지</strong>되고,
+    탄흔은 표시 canvas에 좌표로만 누적(최근 20개)됩니다. 촬영(src) → 변형 복사(fx)라는 버퍼 패턴 덕분에
+    반동 킥·줌 펀치도 DOM 리플로우 없이 순수 캔버스 변환으로 처리됩니다.
+  </div>
+
+  <div class="section-title">커스텀</div>
+  <div class="controls">
+    <div class="ctl">
+      <label>연사 쿨다운<output id="v-cool">120ms</output></label>
+      <input type="range" id="c-cool" min="60" max="400" step="10" value="120">
+    </div>
+    <div class="ctl">
+      <label>반동 세기<output id="v-recoil">14px</output></label>
+      <input type="range" id="c-recoil" min="0" max="30" step="1" value="14">
+    </div>
+    <div class="ctl">
+      <label>탄흔 최대 개수<output id="v-holes">20개</output></label>
+      <input type="range" id="c-holes" min="5" max="40" step="1" value="20">
+    </div>
+    <div class="ctl">
+      <label>십자선 색상</label>
+      <input type="color" id="c-color" value="#6366f1">
+    </div>
+  </div>
+
+  <div class="section-title">사용법</div>
+  <div class="code"><code>&lt;link rel="stylesheet" href="core/canvas-ui.css"&gt;
+&lt;script src="core/canvas-ui.js"&gt;&lt;/script&gt;
+
+&lt;div id="stage"&gt;&lt;/div&gt;
+&lt;script&gt;
+  var app = CanvasUI.create({
+    mount: '#stage',
+    width: 720, height: 560,
+    html: '&lt;div class="kfps"&gt;…키보드 마크업…&lt;/div&gt;',
+    onHit: function (el, ev, api) {
+      // pointerdown = 발사. true 반환 → 코어 기본 포워딩(포커스/클릭) 생략
+      fire(el, ev, api);
+      return true;
+    },
+    onFrame: function (t, api) { /* 반동 감쇠 등 물리 갱신 */ },
+    effect: function (ctx, src, t, api) {
+      // 반동·줌 펀치 변환 → src 복사 → 탄흔 → 섬광 → 십자선
+    },
+  });
+&lt;/script&gt;</code></div>
+
+  <a class="back" href="../index.html">← 컴포넌트 목록(index.html)으로</a>
+</div>
+
+<script src="../core/canvas-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── 키보드 마크업 (루트 요소 1개) ──
+  function keyBtn(k, label, extra) {
+    return '<button type="button" class="kfps-key ' + (extra || '') + '" data-key="' + k + '">' + label + '</button>';
+  }
+  var rows = [
+    'QWERTYUIOP'.split('').map(function (k) { return keyBtn(k, k); }).join(''),
+    'ASDFGHJKL'.split('').map(function (k) { return keyBtn(k, k); }).join(''),
+    'ZXCVBNM'.split('').map(function (k) { return keyBtn(k, k); }).join('') + keyBtn('BS', '⌫', 'kfps-key-wide'),
+    keyBtn('SPACE', 'SPACE', 'kfps-key-space'),
+  ];
+  var html =
+    '<div class="kfps">' +
+      '<input class="cui-input kfps-input" placeholder="키캡을 사격해서 타이핑하세요" aria-label="사격 타이핑 결과">' +
+      '<div class="kfps-board">' +
+        rows.map(function (r) { return '<div class="kfps-row">' + r + '</div>'; }).join('') +
+      '</div>' +
+    '</div>';
+
+  // ── 발사 로직 ──
+  /** fx 버퍼 좌표 계산 (코어와 동일한 방식) */
+  function fxCoords(fx, e) {
+    var r = fx.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (fx.width / r.width),
+      y: (e.clientY - r.top) * (fx.height / r.height),
+    };
+  }
+
+  /** 진짜 input에 글자 반영 (다음 프레임 촬영에 자동 반영됨) */
+  function typeKey(input, key) {
+    if (key === 'BS') input.value = input.value.slice(0, -1);
+    else if (key === 'SPACE') input.value += ' ';
+    else input.value += key;
+  }
+
+  function fire(el, ev, api) {
+    var s = api.state;
+    var now = performance.now();
+    if (now - s.lastShot < s.cooldown) return; // 연사 방지 쿨다운
+    s.lastShot = now;
+
+    var p = fxCoords(api.fx, ev);
+
+    // 반동(화면 킥) + 총구 섬광
+    s.kick = 1;
+    s.kickDir = Math.random() < 0.5 ? -1 : 1;
+    s.flash = { x: p.x, y: p.y, t0: now, ang: Math.random() * Math.PI };
+
+    var key = el && el.closest ? el.closest('[data-key]') : null;
+    if (!key) return; // 빗나감 — 섬광·반동만
+
+    // 명중: 줌 펀치(1프레임) + 키캡 피격 플래시 + 탄흔 데칼 + 타이핑
+    s.punch = 1;
+    key.classList.add('kfps-hit');
+    setTimeout(function () { key.classList.remove('kfps-hit'); }, 140);
+
+    var local = api.toLocal(p.x, p.y); // root 로컬 좌표로 저장 → DOM에 붙어 보임
+    var cracks = [];
+    var n = 4 + Math.floor(Math.random() * 3);
+    for (var i = 0; i < n; i++) {
+      cracks.push({ a: (Math.PI * 2 * i) / n + Math.random() * 0.6, len: 6 + Math.random() * 7 });
+    }
+    s.holes.push({ x: local.x, y: local.y, r: 3.5 + Math.random() * 1.5, cracks: cracks });
+    while (s.holes.length > s.maxHoles) s.holes.shift(); // 최근 N개만 누적
+
+    typeKey(api.root.querySelector('.kfps-input'), key.getAttribute('data-key'));
+  }
+
+  // ── 캔버스 오버레이 드로잉 ──
+  function drawHole(ctx, x, y, hole) {
+    ctx.save();
+    ctx.translate(x, y);
+    // 균열 (만화적 탄흔)
+    ctx.strokeStyle = 'rgba(9, 9, 11, 0.85)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (var i = 0; i < hole.cracks.length; i++) {
+      var c = hole.cracks[i];
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(c.a) * c.len, Math.sin(c.a) * c.len);
+    }
+    ctx.stroke();
+    // 구멍 본체 + 밝은 테두리
+    ctx.fillStyle = '#09090b';
+    ctx.beginPath();
+    ctx.arc(0, 0, hole.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(250, 250, 250, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, hole.r + 1, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFlash(ctx, f, now) {
+    var age = now - f.t0;
+    var DUR = 90;
+    if (age >= DUR) return;
+    var k = 1 - age / DUR;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.ang);
+    ctx.globalAlpha = k;
+    // 스파이크 4방향 (만화적 섬광)
+    ctx.fillStyle = '#fde68a';
+    for (var i = 0; i < 4; i++) {
+      ctx.rotate(Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -3);
+      ctx.lineTo(18 + 10 * k, 0);
+      ctx.lineTo(0, 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // 코어
+    ctx.fillStyle = '#fffbeb';
+    ctx.beginPath();
+    ctx.arc(0, 0, 5 + 4 * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCrosshair(ctx, x, y, color) {
+    if (x < 0) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    var GAP = 5, LEN = 11;
+    ctx.beginPath();
+    ctx.moveTo(x - GAP - LEN, y); ctx.lineTo(x - GAP, y);
+    ctx.moveTo(x + GAP, y); ctx.lineTo(x + GAP + LEN, y);
+    ctx.moveTo(x, y - GAP - LEN); ctx.lineTo(x, y - GAP);
+    ctx.moveTo(x, y + GAP); ctx.lineTo(x, y + GAP + LEN);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── 인스턴스 생성 ──
+  var app = CanvasUI.create({
+    mount: '#stage',
+    width: 720,
+    height: 560,
+    html: html,
+
+    onHit: function (el, ev, api) {
+      fire(el, ev, api);
+      return true; // 기본 포워딩(포커스/클릭) 생략 — 발사가 곧 입력
+    },
+
+    onFrame: function (t, api) {
+      var s = api.state;
+      s.kick *= 0.82; // 반동 감쇠
+      if (s.kick < 0.01) s.kick = 0;
+    },
+
+    effect: function (ctx, src, t, api) {
+      var s = api.state;
+      var cx = api.fx.width / 2;
+      var cy = api.fx.height / 2;
+
+      // 1) 반동 킥 + 줌 펀치(1프레임 슬로모) 변환 아래에서 DOM 촬영본·탄흔을 함께 그림
+      ctx.save();
+      var zoom = 1 + s.punch * 0.05;
+      ctx.translate(cx, cy + s.kick * s.recoil);
+      ctx.rotate(s.kick * 0.006 * s.kickDir);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cx, -cy);
+      ctx.drawImage(src, api.center.x, api.center.y);
+      for (var i = 0; i < s.holes.length; i++) {
+        var h = s.holes[i];
+        drawHole(ctx, api.center.x + h.x, api.center.y + h.y, h);
+      }
+      ctx.restore();
+      s.punch = 0; // 줌 펀치는 정확히 1프레임만
+
+      // 2) 화면 공간 이펙트 (변환 미적용)
+      if (s.flash) drawFlash(ctx, s.flash, t);
+      drawCrosshair(ctx, s.mx, s.my, s.crossColor);
+    },
+  });
+
+  // ── 컴포넌트 상태 초기화 ──
+  var st = app.state;
+  st.lastShot = -Infinity;
+  st.cooldown = 120;   // ms
+  st.recoil = 14;      // px
+  st.maxHoles = 20;    // 탄흔 최근 N개
+  st.crossColor = '#6366f1';
+  st.kick = 0; st.kickDir = 1; st.punch = 0;
+  st.holes = [];
+  st.flash = null;
+  st.mx = -999; st.my = -999;
+
+  // 십자선 추적 + 네이티브 커서 숨김
+  // (코어 pointermove 리스너가 먼저 커서를 지정하므로, 그 뒤에 등록해 'none'으로 덮는다)
+  if (CanvasUI.supported) {
+    app.fx.addEventListener('pointermove', function (e) {
+      var p = fxCoords(app.fx, e);
+      st.mx = p.x; st.my = p.y;
+      app.fx.style.cursor = 'none';
+    });
+    app.fx.addEventListener('pointerleave', function () {
+      st.mx = -999; st.my = -999;
+    });
+  } else {
+    // 폴백(DOM 직접 표시): 이펙트 없이 클릭 = 타이핑만 동작
+    app.root.addEventListener('click', function (e) {
+      var key = e.target.closest ? e.target.closest('[data-key]') : null;
+      if (!key) return;
+      var now = performance.now();
+      if (now - st.lastShot < st.cooldown) return;
+      st.lastShot = now;
+      typeKey(app.root.querySelector('.kfps-input'), key.getAttribute('data-key'));
+    });
+  }
+
+  // ── 커스텀 컨트롤 배선 ──
+  function bindRange(id, outId, unit, apply) {
+    var input = document.getElementById(id);
+    var out = document.getElementById(outId);
+    input.addEventListener('input', function () {
+      out.textContent = input.value + unit;
+      apply(Number(input.value));
+    });
+  }
+  bindRange('c-cool', 'v-cool', 'ms', function (v) { st.cooldown = v; });
+  bindRange('c-recoil', 'v-recoil', 'px', function (v) { st.recoil = v; });
+  bindRange('c-holes', 'v-holes', '개', function (v) {
+    st.maxHoles = v;
+    while (st.holes.length > v) st.holes.shift();
+  });
+  document.getElementById('c-color').addEventListener('input', function (e) {
+    st.crossColor = e.target.value;
+  });
+})();
+</script>
+</body>
+</html>

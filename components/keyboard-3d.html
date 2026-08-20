@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CanvasUI — 3D 키보드</title>
+<link rel="stylesheet" href="../core/canvas-ui.css">
+<style>
+  /* ── 페이지 레이아웃 (토큰만 사용) ── */
+  body {
+    margin: 0; background: var(--cui-bg); color: var(--cui-fg);
+    font-family: var(--cui-font);
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 24px 0 8px; }
+  .desc { color: var(--cui-muted); font-size: 14px; margin: 0 0 24px; }
+  h2 { font-size: 16px; margin: 32px 0 16px; }
+  .preview { display: flex; justify-content: center; overflow-x: auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 24px; align-items: end; }
+  .controls .field { min-width: 200px; }
+  .controls input[type="range"] { width: 100%; accent-color: var(--cui-primary); }
+  .controls input[type="color"] {
+    width: 48px; height: 32px; padding: 2px; border: 1px solid var(--cui-border);
+    border-radius: 8px; background: var(--cui-bg); cursor: pointer;
+  }
+  .code-block {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); padding: 16px; overflow-x: auto;
+  }
+  .code-block code { font-size: 13px; line-height: 1.7; color: var(--cui-fg); white-space: pre; }
+  .back { display: inline-block; margin-top: 32px; color: var(--cui-muted); font-size: 14px; text-decoration: none; }
+  .back:hover { color: var(--cui-fg); }
+
+  /* ── 3D 키보드 컴포넌트 (촬영 대상 DOM) ──
+     실제 :hover는 canvas 위라 안 걸리므로 .cui-hover / .cui-active 를 함께 선언 */
+  .kbd3d { width: max-content; padding: 8px; }
+  .kbd3d-input { margin-bottom: 16px; box-sizing: border-box; }
+  .kbd3d-board {
+    background: var(--cui-card); border: 1px solid var(--cui-border);
+    border-radius: var(--cui-radius); box-shadow: var(--cui-shadow);
+    padding: 16px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .kbd3d-row { display: flex; justify-content: center; gap: 8px; }
+  .kbd3d-key {
+    width: 48px; height: 48px; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    background: var(--cui-bg); color: var(--cui-fg);
+    border: 1px solid var(--cui-border); border-radius: 8px;
+    font-family: var(--cui-font); cursor: pointer;
+    box-shadow: 0 2px 0 var(--cui-border);
+    transition: transform 0.06s, box-shadow 0.06s, border-color 0.12s, background 0.12s;
+  }
+  .kbd3d-key .k-ko { font-size: 11px; color: var(--cui-muted); line-height: 1; }
+  .kbd3d-key .k-en { font-size: 14px; font-weight: 600; line-height: 1; }
+  .kbd3d-key:hover, .kbd3d-key.cui-hover { border-color: var(--cui-muted); background: var(--cui-card); }
+  .kbd3d-key:active, .kbd3d-key.cui-active {
+    transform: translateY(2px); box-shadow: 0 0 0 var(--cui-border);
+    border-color: var(--cui-primary); background: var(--cui-card);
+  }
+  .kbd3d-key.kbd3d-space { width: 288px; }
+  .kbd3d-key.kbd3d-space .k-en { font-size: 12px; color: var(--cui-muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>3D 키보드</h1>
+  <p class="desc">한/영 키캡 DOM 키보드를 원근 기울기로 렌더합니다. 물리 키보드를 치거나 키캡을 클릭하면 키가 눌리고, 그 위치에서 잉크 리플이 canvas로 퍼집니다. 입력은 키보드 위의 진짜 input에 쌓입니다.</p>
+
+  <section class="preview cui-card">
+    <div id="mount"></div>
+  </section>
+
+  <h2>커스텀</h2>
+  <section class="cui-card controls">
+    <div class="field">
+      <label class="cui-label" for="tilt">기울기 각도: <span id="tilt-val">22</span>°</label>
+      <input type="range" id="tilt" min="0" max="40" step="1" value="22">
+    </div>
+    <div class="field">
+      <label class="cui-label" for="ripple-color">리플 색</label>
+      <input type="color" id="ripple-color" value="#6366f1">
+    </div>
+  </section>
+
+  <h2>사용법</h2>
+  <section class="code-block"><code>const kb = CanvasUI.create({
+  mount: '#mount',
+  html: keyboardHtml, // .kbd3d 마크업 — input + button[data-key] 키캡
+  width: 760, height: 440,
+  onFrame: (t, api) =&gt; {
+    // 리플 진행 (물리 갱신은 effect 앞, onFrame에서)
+    api.state.ripples = (api.state.ripples || []).filter(r =&gt; r.alpha &gt; 0.02);
+    api.state.ripples.forEach(r =&gt; { r.r += 5; r.alpha *= 0.93; });
+  },
+  effect: (ctx, src, t, api) =&gt; {
+    // 소스 canvas를 가로 스트립으로 잘라 폭을 보간 → 원근 사다리꼴 (유사 3D)
+    const g = geom(api); // tiltDeg → scaleTop·squash·중심 좌표
+    for (let sy = 0; sy &lt; g.H; sy += 3) {
+      const s = g.scaleTop + (1 - g.scaleTop) * (sy / g.H);
+      ctx.drawImage(src, 0, sy, g.W, 3,
+        g.cx - g.W * s / 2, g.topY + sy * g.squash, g.W * s, 3 * g.squash + 1);
+    }
+    // 리플은 같은 원근 매핑으로 타원 링을 그린다
+  },
+  onHit: (el, ev, api) =&gt; {
+    // effect가 좌표를 변형하므로 역변환 후 api.hit()으로 직접 판정
+    const local = unproject(api, ev);          // fx 좌표 → 기울기 역변환 → 로컬
+    const t2 = api.hit(local.x, local.y);
+    const btn = t2 &amp;&amp; t2.closest('button[data-key]');
+    if (btn) { flash(btn); btn.click(); }       // click → data-key 문자를 input에 삽입
+    return true; // 기본 포워딩(미보정 좌표) 생략
+  },
+});
+kb.state.tiltDeg = 22;        // 커스텀: 기울기 각도 (0~40)
+kb.state.rippleColor = '#6366f1'; // 커스텀: 리플 색</code></section>
+
+  <a class="back" href="../index.html">&larr; 컴포넌트 목록으로</a>
+</div>
+
+<script src="../core/canvas-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── 키캡 데이터: QWERTY 3열 (영문 + 두벌식 한글) + 스페이스 ──
+  var ROWS = [
+    [['q','ㅂ'],['w','ㅈ'],['e','ㄷ'],['r','ㄱ'],['t','ㅅ'],['y','ㅛ'],['u','ㅕ'],['i','ㅑ'],['o','ㅐ'],['p','ㅔ']],
+    [['a','ㅁ'],['s','ㄴ'],['d','ㅇ'],['f','ㄹ'],['g','ㅎ'],['h','ㅗ'],['j','ㅓ'],['k','ㅏ'],['l','ㅣ']],
+    [['z','ㅋ'],['x','ㅌ'],['c','ㅊ'],['v','ㅍ'],['b','ㅠ'],['n','ㅜ'],['m','ㅡ']],
+  ];
+
+  function keyBtn(en, ko) {
+    return '<button type="button" class="kbd3d-key" data-key="' + en + '">' +
+      '<span class="k-ko">' + ko + '</span><span class="k-en">' + en.toUpperCase() + '</span></button>';
+  }
+  var rowsHtml = ROWS.map(function (row) {
+    return '<div class="kbd3d-row">' + row.map(function (k) { return keyBtn(k[0], k[1]); }).join('') + '</div>';
+  }).join('');
+  var keyboardHtml =
+    '<div class="kbd3d">' +
+      '<input class="cui-input kbd3d-input" placeholder="키보드를 두드리거나 키캡을 클릭하세요">' +
+      '<div class="kbd3d-board">' + rowsHtml +
+        '<div class="kbd3d-row"><button type="button" class="kbd3d-key kbd3d-space" data-key=" ">' +
+          '<span class="k-en">SPACE</span></button></div>' +
+      '</div>' +
+    '</div>';
+
+  // ── 원근 기하: tiltDeg → 스트립 폭 보간(scaleTop) + 세로 압축(squash) ──
+  function geom(api) {
+    var deg = api.state.tiltDeg == null ? 22 : api.state.tiltDeg;
+    var rad = deg * Math.PI / 180;
+    var W = api.src.width, H = api.src.height;
+    var scaleTop = 1 - Math.sin(rad) * 0.55; // 위쪽이 좁아지는 사다리꼴
+    var squash = 1 - Math.sin(rad) * 0.30;   // 세로 압축
+    return {
+      W: W, H: H, scaleTop: scaleTop, squash: squash,
+      cx: api.fx.width / 2,
+      topY: (api.fx.height - H * squash) / 2,
+    };
+  }
+  function scaleAt(g, y) { return g.scaleTop + (1 - g.scaleTop) * (y / g.H); }
+  /** 로컬 좌표 → 원근 적용된 fx 좌표 */
+  function project(g, x, y) {
+    var s = scaleAt(g, y);
+    return { x: g.cx + (x - g.W / 2) * s, y: g.topY + y * g.squash, s: s };
+  }
+  /** fx 좌표 → 원근 역변환 → 로컬 좌표 */
+  function unproject(g, px, py) {
+    var y = (py - g.topY) / g.squash;
+    var s = scaleAt(g, y);
+    return { x: g.W / 2 + (px - g.cx) / s, y: y };
+  }
+
+  // ── 인스턴스 생성 ──
+  var kb = CanvasUI.create({
+    mount: '#mount',
+    html: keyboardHtml,
+    width: 760,
+    height: 440,
+
+    // 리플 진행 (effect 앞에 호출됨)
+    onFrame: function (t, api) {
+      var ripples = api.state.ripples || [];
+      for (var i = 0; i < ripples.length; i++) {
+        var r = ripples[i];
+        r.r += 5 + r.r * 0.04;
+        r.alpha *= 0.93;
+      }
+      api.state.ripples = ripples.filter(function (r) { return r.alpha > 0.02; });
+    },
+
+    // 버퍼 패턴: src 촬영본을 가로 스트립으로 잘라 원근 사다리꼴로 복사 + 리플
+    effect: function (ctx, src, t, api) {
+      var g = geom(api);
+
+      // 바닥 그림자
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(g.cx, g.topY + g.H * g.squash + 14, g.W * 0.46, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 원근 스트립 (2D 변환 유사 3D)
+      var STRIP = 3;
+      for (var sy = 0; sy < g.H; sy += STRIP) {
+        var h = Math.min(STRIP, g.H - sy);
+        var s = scaleAt(g, sy + h / 2);
+        var dw = g.W * s;
+        ctx.drawImage(src, 0, sy, g.W, h,
+          g.cx - dw / 2, g.topY + sy * g.squash, dw, h * g.squash + 1);
+      }
+
+      // 잉크 리플: 키 로컬 좌표를 같은 원근으로 매핑해 타원 링으로
+      var ripples = api.state.ripples || [];
+      var color = api.state.rippleColor || '#6366f1';
+      for (var i = 0; i < ripples.length; i++) {
+        var r = ripples[i];
+        var p = project(g, r.x, r.y);
+        var rx = r.r * p.s, ry = r.r * p.s * g.squash;
+        ctx.globalAlpha = r.alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, 4 * r.alpha);
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = r.alpha * 0.15;
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    },
+
+    // effect가 좌표를 변형하므로 역변환 후 api.hit()으로 직접 판정
+    onHit: function (el, ev, api) {
+      var rect = api.fx.getBoundingClientRect();
+      var px = (ev.clientX - rect.left) * (api.fx.width / rect.width);
+      var py = (ev.clientY - rect.top) * (api.fx.height / rect.height);
+      var local = unproject(geom(api), px, py);
+      var target = api.hit(local.x, local.y);
+
+      if (target) {
+        var btn = target.closest('button[data-key]');
+        if (btn && api.root.contains(btn)) {
+          flash(btn);
+          btn.click(); // → 아래 위임 click 핸들러가 data-key를 input에 삽입 + 리플
+          return true;
+        }
+        if (target === inputEl) {
+          inputEl.focus();
+          try {
+            var len = inputEl.value.length;
+            inputEl.setSelectionRange(len, len);
+          } catch (ignored) { /* 선택 미지원 타입 */ }
+          return true;
+        }
+      }
+      if (api.root.contains(document.activeElement)) document.activeElement.blur();
+      return true; // 기본 포워딩(미보정 좌표) 생략
+    },
+  });
+
+  kb.state.tiltDeg = 22;
+  kb.state.rippleColor = '#6366f1';
+  kb.state.ripples = [];
+
+  var inputEl = kb.root.querySelector('.kbd3d-input');
+
+  // ── 키 로컬 중심 좌표 (offset 누적) → 리플 생성 ──
+  function spawnRippleAt(btn) {
+    var l = 0, t = 0, n = btn;
+    while (n && n !== kb.root) { l += n.offsetLeft; t += n.offsetTop; n = n.offsetParent; }
+    kb.state.ripples.push({
+      x: l + btn.offsetWidth / 2,
+      y: t + btn.offsetHeight / 2,
+      r: 8, alpha: 0.85,
+    });
+    if (kb.state.ripples.length > 24) kb.state.ripples.shift();
+  }
+
+  // ── 키캡 눌림 애니메이션 (.cui-active 잠깐 토글) ──
+  function flash(btn) {
+    btn.classList.add('cui-active');
+    setTimeout(function () { btn.classList.remove('cui-active'); }, 130);
+  }
+
+  // ── 클릭(마우스/폴백 공통): data-key 문자를 input에 삽입 + 리플 ──
+  kb.root.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button[data-key]') : null;
+    if (!btn) return;
+    inputEl.value += btn.dataset.key;
+    inputEl.focus();
+    try {
+      var len = inputEl.value.length;
+      inputEl.setSelectionRange(len, len);
+    } catch (ignored) { /* 무시 */ }
+    spawnRippleAt(btn);
+  });
+
+  // ── 물리 키보드: e.code 기반(한글 IME에서도 동작) → 키캡 애니메이션 + 리플 ──
+  function codeToKey(e) {
+    if (e.code === 'Space') return ' ';
+    var m = /^Key([A-Z])$/.exec(e.code);
+    return m ? m[1].toLowerCase() : null;
+  }
+  window.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = e.target.tagName;
+    if ((tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && e.target !== inputEl) return; // 페이지 컨트롤 입력은 통과
+    var key = codeToKey(e);
+    if (!key) return;
+    var btn = kb.root.querySelector('[data-key="' + key + '"]');
+    if (!btn) return;
+    flash(btn);
+    spawnRippleAt(btn);
+    if (document.activeElement !== inputEl) {
+      if (key === ' ') { e.preventDefault(); inputEl.value += ' '; } // 페이지 스크롤 방지 + 직접 삽입
+      inputEl.focus(); // 이후 문자 입력·한글 IME는 브라우저가 처리 → 다음 프레임 촬영에 반영
+    }
+  });
+
+  // ── 커스텀 컨트롤 ──
+  var tilt = document.getElementById('tilt');
+  var tiltVal = document.getElementById('tilt-val');
+  tilt.addEventListener('input', function () {
+    kb.state.tiltDeg = Number(tilt.value);
+    tiltVal.textContent = tilt.value;
+  });
+  document.getElementById('ripple-color').addEventListener('input', function (e) {
+    kb.state.rippleColor = e.target.value;
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+/* ================================================================
+   CanvasUI 코어 스타일 — shadcn 감성 디자인 시스템 (다크)
+   컴포넌트는 아래 CSS 변수 토큰만 사용하고, 커스텀은 토큰 오버라이드로.
+   ================================================================ */
+:root {
+  --cui-bg: #09090b;          /* 페이지 배경 */
+  --cui-card: #18181b;        /* 카드/서피스 */
+  --cui-border: #27272a;      /* 얇은 보더 */
+  --cui-fg: #fafafa;          /* 본문 텍스트 */
+  --cui-muted: #a1a1aa;       /* 보조 텍스트 */
+  --cui-primary: #6366f1;     /* 포인트 컬러 */
+  --cui-primary-fg: #ffffff;  /* 포인트 위 텍스트 */
+  --cui-radius: 12px;         /* 기본 라운드 */
+  --cui-font: "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --cui-shadow: 0 4px 24px rgba(0, 0, 0, 0.35); /* 부드러운 그림자 */
+}
+
+/* ── 코어 레이아웃 (변경 금지: 촬영/숨김 규칙과 결합됨) ── */
+.cui-mount { position: relative; font-family: var(--cui-font); }
+.cui-fx { display: block; max-width: 100%; touch-action: none; }
+.cui-fx.cui-hidden { display: none; } /* 폴백 시 fx만 숨김 (fx는 촬영 대상 아님) */
+
+/* 소스 canvas 숨김: 반드시 absolute + z-index:-1 겹침만.
+   display:none / visibility:hidden / left:-9999px 금지 (페인트 생략 → 투명 촬영) */
+.cui-src-wrap { position: absolute; top: 0; left: 0; z-index: -1; }
+.cui-src-wrap canvas { display: block; }
+
+/* root: hit() offset 누적 기준점이므로 반드시 positioned */
+.cui-root { position: relative; font-family: var(--cui-font); color: var(--cui-fg); }
+
+/* ── 감지 배지 · 미지원 안내 · 에러 박스 (코어 자동 삽입) ── */
+.cui-badge {
+  display: inline-block; margin: 8px; padding: 4px 12px;
+  border-radius: 999px; font-size: 13px; font-weight: 600;
+  font-family: var(--cui-font);
+}
+.cui-badge-ok { background: #12351f; color: #4ade80; border: 1px solid #22643a; }
+.cui-badge-no { background: #3a1620; color: #f87171; border: 1px solid #6b2432; }
+.cui-warn {
+  margin: 0 8px 8px; padding: 12px 16px; font-size: 14px; line-height: 1.7;
+  background: #241a0a; border: 1px solid #6b4e16; border-radius: var(--cui-radius);
+  color: var(--cui-fg); font-family: var(--cui-font);
+}
+.cui-warn code { background: #3a2c10; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.cui-error {
+  display: none; margin-top: 8px; padding: 10px 12px;
+  font-size: 13px; color: #f87171; white-space: pre-wrap;
+  background: #3a1620; border: 1px solid #6b2432; border-radius: 8px;
+  font-family: var(--cui-font);
+}
+
+/* ── 공용 프리미티브 (컴포넌트 공통, 8px 그리드) ──
+   주의: 실제 :hover는 canvas 위라 안 걸린다.
+   반드시 :hover 와 .cui-hover 를, :active 와 .cui-active 를 함께 선언할 것. */
+.cui-card {
+  background: var(--cui-card);
+  border: 1px solid var(--cui-border);
+  border-radius: var(--cui-radius);
+  box-shadow: var(--cui-shadow);
+  padding: 24px;
+}
+.cui-btn {
+  display: inline-block; padding: 8px 16px;
+  background: var(--cui-primary); color: var(--cui-primary-fg);
+  border: 1px solid transparent; border-radius: 8px;
+  font-size: 14px; font-weight: 600; font-family: var(--cui-font);
+  cursor: pointer; transition: filter 0.12s, transform 0.08s;
+}
+.cui-btn:hover, .cui-btn.cui-hover { filter: brightness(1.12); }
+.cui-btn:active, .cui-btn.cui-active { transform: scale(0.97); filter: brightness(0.92); }
+.cui-btn-ghost {
+  background: transparent; color: var(--cui-fg);
+  border-color: var(--cui-border);
+}
+.cui-btn-ghost:hover, .cui-btn-ghost.cui-hover { background: rgba(255, 255, 255, 0.06); filter: none; }
+.cui-input {
+  width: 100%; padding: 8px 12px;
+  background: var(--cui-bg); color: var(--cui-fg);
+  border: 1px solid var(--cui-border); border-radius: 8px;
+  font-size: 14px; font-family: var(--cui-font);
+  outline: none; caret-color: var(--cui-fg);
+}
+.cui-input::placeholder { color: var(--cui-muted); }
+.cui-input:hover, .cui-input.cui-hover { border-color: var(--cui-muted); }
+.cui-input:focus { border-color: var(--cui-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cui-primary) 25%, transparent); }
+.cui-label { display: block; font-size: 13px; color: var(--cui-muted); margin-bottom: 8px; }
+
+.cui-need { padding: 24px; text-align: center; font-size: 14px; color: var(--cui-muted); border: 1px dashed var(--cui-border); border-radius: var(--cui-radius); }

@@ -1,0 +1,13 @@
+{
+  "name": "canvas-ui",
+  "owner": {
+    "name": "greekr4"
+  },
+  "plugins": [
+    {
+      "name": "canvas-ui",
+      "source": "./",
+      "description": "HTML-in-Canvas API 스킬"
+    }
+  ]
+}
